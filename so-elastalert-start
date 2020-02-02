@@ -1,0 +1,58 @@
+#!/bin/bash
+#
+# Copyright 2014,2015,2016,2017,2018,2019,2020 Security Onion Solutions, LLC
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+. /usr/sbin/so-elastic-common
+
+. /etc/nsm/securityonion.conf
+
+if [ "$ELASTALERT_ENABLED" = "yes" ]; then
+        echo -n "so-elastalert: "
+        if docker ps | grep -q so-elastalert; then
+                echo "Already started!"
+        else
+
+		CONFIG="/etc/elastalert/conf/elastalert_config.yaml"
+		if ! [ -f $CONFIG ]; then
+			mkdir -p /etc/elastalert/conf/
+			cp /opt/elastic/src/etc/elastalert/conf/elastalert_config.yaml $CONFIG
+		fi
+
+		# If Elastic auth is enabled, then make sure elastalert is configured to authenticate to Elasticsearch
+		if [ -f $ELASTICSEARCH_ACCOUNTS ]; then
+			chown elastalert:elastalert $CONFIG
+			chmod 640 $CONFIG
+			ELASTIC_PASSWORD=$(grep "PASSWORD elastic = " $ELASTICSEARCH_ACCOUNTS | awk '{print $4}')
+			sed -i "s|^#es_username: someusername$|es_username: elastic|" $CONFIG
+			sed -i "s|^#es_password: somepassword$|es_password: $ELASTIC_PASSWORD|" $CONFIG
+                fi
+
+		docker rm so-elastalert >/dev/null 2>&1
+
+		# No published ports
+                docker run --name=so-elastalert \
+			--network=thehive_default \
+                        --detach \
+                        --volume /etc/elastalert/rules/:/etc/elastalert/rules/ \
+                        --volume /etc/elastalert/conf/elastalert_config.yaml:/etc/elastalert/conf/elastalert_config.yaml \
+                        --volume /var/log/elastalert:/var/log/elastalert/ \
+                        $ELASTALERT_OPTIONS \
+                        $DOCKERHUB/so-elastalert
+
+		# ElastAlert will connect to Elasticsearch over $DOCKERNET
+		docker network connect --alias elastalert $DOCKERNET so-elastalert
+        fi
+fi
