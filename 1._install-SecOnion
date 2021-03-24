@@ -1,0 +1,4 @@
+installing security onion--
+During installation you're supposed to choose 2 NICs (both bridged)
+If you choose DHCP; it will give you the same IP address as your host VM.  So don't do that.  Choose Static, and find an IP address on your home network that isn't in use.
+Once you assign it with Security Onion, reserve that IP to your SO VM in your home network/router.
